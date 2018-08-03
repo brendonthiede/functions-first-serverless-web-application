@@ -7,7 +7,7 @@ This fork from https://github.com/Azure-Samples/functions-first-serverless-web-a
 You need to already have an Azure subscription set up and you will need the following software installed:
 
 * [Azure CLI](https://docs.microsoft.com/cli/azure/install-azure-cli) 2.0 or greater
-* Node
+* Node 10 or greater
 * .NET Core 2.0 or greater
 
 The scripts included here also assume that you have bash installed, i.e. you are running a Mac or Linux or you have Bash on Windows, git-bash, or similar.
