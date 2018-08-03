@@ -1,0 +1,139 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "functionAppName": {
+      "defaultValue": "[concat('tutorial-func-', uniqueString(subscription().subscriptionId))]",
+      "type": "string"
+    },
+    "appServicePlanName": {
+      "defaultValue": "FunctionTutorialPlan",
+      "type": "string"
+    },
+    "functionStorageAccountName": {
+      "defaultValue": "[concat('functutor', uniqueString(resourceGroup().id))]",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 24,
+      "metadata": {
+        "description": "Storage account names can only contain alphanumeric characters"
+      }
+    },
+    "storageAccountEndpointSuffix": {
+      "defaultValue": "core.windows.net",
+      "type": "string",
+      "allowedValues": [
+        "core.windows.net",
+        "core.usgovcloudapi.net",
+        "core.chinacloudapi.cn",
+        "core.cloudapi.de"
+      ],
+      "metadata": {
+        "description": "This needs to match the value for cloud/enrollment type being deployed to. Run `az cloud show` and look at `suffixes` -> `storageEndpoint`",
+        "documentation": "https://docs.microsoft.com/en-us/azure/storage/common/storage-powershell-independent-clouds#endpoint-suffix"
+      }
+    },
+    "location": {
+      "defaultValue": "[resourceGroup().location]",
+      "type": "string"
+    },
+    "environmentName": {
+      "defaultValue": "Development",
+      "type": "string",
+      "metadata": {
+        "description": "This controls certain behaviors in .NET Core apps, e.g. more/less verbose errors"
+      }
+    }
+  },
+  "variables": {
+    "storageAccountApiVersion": "2018-03-01-preview",
+    "appServicePlanApiVersion": "2016-09-01",
+    "appServiceApiVersion": "2016-08-01",
+    "functionExtensionVersion": "~2"
+  },
+  "resources": [
+    {
+      "comments": "Storage to be used for Function App, static site and image storage",
+      "type": "Microsoft.Storage/storageAccounts",
+      "kind": "StorageV2",
+      "name": "[parameters('functionStorageAccountName')]",
+      "apiVersion": "[variables('storageAccountApiVersion')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {
+        "supportsHttpsTrafficOnly": true,
+        "accessTier": "Hot"
+      },
+      "dependsOn": []
+    },
+    {
+      "comments": "App Service Plan set up for consumption based pricing for Function Apps",
+      "type": "Microsoft.Web/serverfarms",
+      "kind": "functionapp",
+      "name": "[parameters('appServicePlanName')]",
+      "apiVersion": "[variables('appServicePlanApiVersion')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Y1",
+        "tier": "Dynamic",
+        "capacity": 0
+      },
+      "properties": {
+        "name": "[parameters('appServicePlanName')]",
+        "computeMode": "Dynamic"
+      },
+      "dependsOn": []
+    },
+    {
+      "comments": "Function App that will have Azure Functions deployed to",
+      "type": "Microsoft.Web/sites",
+      "kind": "functionapp",
+      "name": "[parameters('functionAppName')]",
+      "apiVersion": "[variables('appServiceApiVersion')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+        "siteConfig": {
+          "appSettings": [
+            {
+              "name": "MSDEPLOY_RENAME_LOCKED_FILES",
+              "value": "1"
+            },
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',parameters('functionStorageAccountName'),';AccountKey=',listkeys(parameters('functionStorageAccountName'), variables('storageAccountApiVersion')).keys[0].value)]"
+            },
+            {
+              "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',parameters('functionStorageAccountName'),';AccountKey=',listkeys(parameters('functionStorageAccountName'), variables('storageAccountApiVersion')).keys[0].value)]"
+            },
+            {
+              "name": "WEBSITE_CONTENTSHARE",
+              "value": "[concat(toLower(parameters('functionAppName')), uniquestring(resourceGroup().id))]"
+            },
+            {
+              "name": "FUNCTIONS_EXTENSION_VERSION",
+              "value": "[variables('functionExtensionVersion')]"
+            },
+            {
+              "name": "ASPNETCORE_ENVIRONMENT",
+              "value": "[parameters('environmentName')]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('functionStorageAccountName'))]",
+        "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "functionStorageAccountName": {
+      "type": "string",
+      "value": "[parameters('functionStorageAccountName')]"
+    }
+  }
+}
