@@ -3,15 +3,15 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "functionAppName": {
-      "defaultValue": "[concat('tutorial-func-', uniqueString(subscription().subscriptionId))]",
+      "defaultValue": "[concat('serverless-tutorial-func-', uniqueString(subscription().subscriptionId))]",
       "type": "string"
     },
     "appServicePlanName": {
-      "defaultValue": "FunctionTutorialPlan",
+      "defaultValue": "serverless-tutorial-plan",
       "type": "string"
     },
     "functionStorageAccountName": {
-      "defaultValue": "[concat('functutor', uniqueString(resourceGroup().id))]",
+      "defaultValue": "[concat('serverless', uniqueString(resourceGroup().id))]",
       "type": "string",
       "minLength": 3,
       "maxLength": 24,
@@ -19,19 +19,17 @@
         "description": "Storage account names can only contain alphanumeric characters"
       }
     },
-    "storageAccountEndpointSuffix": {
-      "defaultValue": "core.windows.net",
-      "type": "string",
-      "allowedValues": [
-        "core.windows.net",
-        "core.usgovcloudapi.net",
-        "core.chinacloudapi.cn",
-        "core.cloudapi.de"
-      ],
-      "metadata": {
-        "description": "This needs to match the value for cloud/enrollment type being deployed to. Run `az cloud show` and look at `suffixes` -> `storageEndpoint`",
-        "documentation": "https://docs.microsoft.com/en-us/azure/storage/common/storage-powershell-independent-clouds#endpoint-suffix"
-      }
+    "cosmosDbAccountName": {
+      "defaultValue": "[concat('serverless-tutorial-cosmosdb-', uniqueString(subscription().subscriptionId))]",
+      "type": "string"
+    },
+    "computerVisionAccountName": {
+      "defaultValue": "[concat('serverless-tutorial-vision-', uniqueString(subscription().subscriptionId))]",
+      "type": "string"
+    },
+    "computerVisionSku": {
+      "defaultValue": "F0",
+      "type": "string"
     },
     "location": {
       "defaultValue": "[resourceGroup().location]",
@@ -49,7 +47,10 @@
     "storageAccountApiVersion": "2018-03-01-preview",
     "appServicePlanApiVersion": "2016-09-01",
     "appServiceApiVersion": "2016-08-01",
-    "functionExtensionVersion": "~2"
+    "cosmosDbApiVersion": "2015-04-08",
+    "computerVisionApiVersion": "2016-02-01-preview",
+    "functionExtensionVersion": "~2",
+    "computerVisionAccountId": "[concat(resourceGroup().id,'/providers/','Microsoft.CognitiveServices/accounts/', parameters('computerVisionAccountName'))]"
   },
   "resources": [
     {
@@ -106,6 +107,10 @@
               "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',parameters('functionStorageAccountName'),';AccountKey=',listkeys(parameters('functionStorageAccountName'), variables('storageAccountApiVersion')).keys[0].value)]"
             },
             {
+              "name": "AzureWebJobsDashboard",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',parameters('functionStorageAccountName'),';AccountKey=',listkeys(parameters('functionStorageAccountName'), variables('storageAccountApiVersion')).keys[0].value)]"
+            },
+            {
               "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
               "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',parameters('functionStorageAccountName'),';AccountKey=',listkeys(parameters('functionStorageAccountName'), variables('storageAccountApiVersion')).keys[0].value)]"
             },
@@ -120,20 +125,75 @@
             {
               "name": "ASPNETCORE_ENVIRONMENT",
               "value": "[parameters('environmentName')]"
+            },
+            {
+              "name": "CosmosDBConnection",
+              "value": "[concat('AccountEndpoint=', reference(concat('Microsoft.DocumentDb/databaseAccounts/', parameters('cosmosDbAccountName'))).documentEndpoint, ';AccountKey=', listKeys(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosDbAccountName')), variables('cosmosDbApiVersion')).primaryMasterKey)]"
+            },
+            {
+              "name": "COMP_VISION_KEY",
+              "value": "[listKeys(variables('computerVisionAccountId'),variables('computerVisionApiVersion')).key1]"
+            },
+            {
+              "name": "COMP_VISION_URL",
+              "value": "[reference(variables('computerVisionAccountId'),variables('computerVisionApiVersion')).endpoint]"
             }
           ]
         }
       },
       "dependsOn": [
         "[resourceId('Microsoft.Storage/storageAccounts', parameters('functionStorageAccountName'))]",
-        "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]"
+        "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosDbAccountName'))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('computerVisionAccountName'))]"
       ]
+    },
+    {
+      "comments": "Cosmos DB instance.",
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "name": "[parameters('cosmosDbAccountName')]",
+      "apiVersion": "[variables('cosmosDbApiVersion')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "databaseAccountOfferType": "Standard",
+        "name": "[parameters('cosmosDbAccountName')]"
+      },
+      "dependsOn": []
+    },
+    {
+      "comments": "Computer Vision Cognitive Service.",
+      "type": "Microsoft.CognitiveServices/accounts",
+      "kind": "ComputerVision",
+      "name": "[parameters('computerVisionAccountName')]",
+      "apiVersion": "[variables('computerVisionApiVersion')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('computerVisionSku')]"
+      },
+      "properties": {},
+      "dependsOn": []
     }
   ],
   "outputs": {
+    "functionAppName": {
+      "type": "string",
+      "value": "[parameters('functionAppName')]"
+    },
     "functionStorageAccountName": {
       "type": "string",
       "value": "[parameters('functionStorageAccountName')]"
+    },
+    "functionAppUri": {
+      "type": "string",
+      "value": "[reference(concat('Microsoft.Web/sites/', parameters('functionAppName'))).hostnames[0]]"
+    },
+    "functionStorageBlobBaseUrl": {
+      "type": "string",
+      "value": "[reference(parameters('functionStorageAccountName')).primaryEndpoints.blob]"
+    },
+    "cosmosDbAccountName": {
+      "type": "string",
+      "value": "[parameters('cosmosDbAccountName')]"
     }
   }
 }
